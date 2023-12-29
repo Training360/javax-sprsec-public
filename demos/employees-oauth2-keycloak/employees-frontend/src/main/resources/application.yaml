@@ -1,0 +1,30 @@
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+
+logging:
+  level:
+    employees: DEBUG
+    org.hibernate.SQL: TRACE
+
+employees:
+  backend-url: http://localhost:8081
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: employees-frontend
+            authorization-grant-type: authorization_code
+            redirect-uri: http://localhost:8080/login/oauth2/code/
+            scope: openid,email,profile
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8090/auth/realms/EmployeesRealm
+            user-name-attribute: preferred_username
