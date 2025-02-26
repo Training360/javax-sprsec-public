@@ -1,0 +1,28 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/employees
+    username: employees
+    password: employees
+  jpa:
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/db-changelog.yaml
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8090/realms/EmployeesRealm
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+
+logging:
+  level:
+    employees: DEBUG
+    org.hibernate.SQL: TRACE

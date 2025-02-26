@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity6">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Employees</title>
+    <script src="http://127.0.0.1:5500/pages/script.js"></script>
+</head>
+<body>
+
+<h1>Employees</h1>
+
+<p>Username: <span sec:authentication="name">Bob</span></p>
+<p>Roles: <span sec:authentication="principal.authorities">USER</span></p>
+
+<table>
+    <thead>
+    <tr>
+        <th>Id</th>
+        <th>Name</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="employee : ${employees}">
+            <td th:text="${employee.id}"></td>
+            <td th:text="${employee.name}"></td>
+    </tr>
+    </tbody>
+</table>
+
+<div sec:authorize="hasRole('ADMIN')">
+    <a href="/create-employee">Create employee</a>
+</div>
+
+<form th:action="@{/logout}" method="post">
+    <input type="submit" value="Logout">
+</form>
+
+</body>
+</html>

@@ -13,3 +13,10 @@ databaseChangeLog:
         - sqlFile:
             path: 02-users.sql
             relativeToChangelogFile: true
+  - changeSet:
+      id: 03-owner
+      author: trainer
+      changes:
+        - sqlFile:
+            path: 03-owner.sql
+            relativeToChangelogFile: true

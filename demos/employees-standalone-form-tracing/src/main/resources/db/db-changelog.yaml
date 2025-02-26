@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 01-create-employees
+      author: trainer
+      changes:
+        - sqlFile:
+            path: 01-create-employees.sql
+            relativeToChangelogFile: true
+  - changeSet:
+      id: 02-users
+      author: trainer
+      changes:
+        - sqlFile:
+            path: 02-users.sql
+            relativeToChangelogFile: true
+  - changeSet:
+      id: 03-owner
+      author: trainer
+      changes:
+        - sqlFile:
+            path: 03-owner.sql
+            relativeToChangelogFile: true
+  - changeSet:
+      id: 04-persistence-logins
+      author: trainer
+      changes:
+        - sqlFile:
+            path: 04-persistence-logins.sql
+            relativeToChangelogFile: true

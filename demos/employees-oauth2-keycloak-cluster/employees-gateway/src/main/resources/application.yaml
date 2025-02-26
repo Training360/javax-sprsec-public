@@ -1,0 +1,12 @@
+server:
+  port: 8084
+spring:
+  application:
+    name: employees-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: employees-frontend
+          uri: lb://employees-frontend
+          predicates:
+            - Path=/**

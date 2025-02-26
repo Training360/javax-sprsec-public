@@ -31,10 +31,10 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/login", "/", "/create-employee", "/logout")
+                .securityMatcher("/login", "/", "/error", "/create-employee", "/logout")
                 .authorizeHttpRequests(
                         registry -> registry
-                                .requestMatchers("/login")
+                                .requestMatchers("/login", "/error")
                                 .permitAll()
                                 .requestMatchers("/")
                                 .hasRole("USER")
@@ -67,4 +67,15 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
+
+    @Bean
+    public LocaleResolver localeResolver() {
+        return new FixedLocaleResolver(new Locale("hu", "HU"));
+    }
+
+    @Bean
+    public HttpFirewall httpFirewall() {
+        return new StrictHttpFirewall();
+    }
+
 }

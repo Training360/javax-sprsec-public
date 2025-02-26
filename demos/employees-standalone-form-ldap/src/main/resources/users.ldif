@@ -1,0 +1,48 @@
+dn: dc=springframework,dc=org
+objectclass: top
+objectclass: domain
+objectclass: extensibleObject
+dc: springframework
+
+dn: ou=groups,dc=springframework,dc=org
+objectclass: top
+objectclass: organizationalUnit
+ou: groups
+
+dn: ou=people,dc=springframework,dc=org
+objectclass: top
+objectclass: organizationalUnit
+ou: people
+
+dn: uid=admin,ou=people,dc=springframework,dc=org
+objectclass: top
+objectclass: person
+objectclass: organizationalPerson
+objectclass: inetOrgPerson
+uid: admin
+cn: John Doe
+sn: Doe
+userPassword: $2a$10$zDd7RskqB5p1wRXAxRrpF.zFDYFI8d6iEbUZBjw1ZjfkeO3j8YmEO
+
+dn: uid=user,ou=people,dc=springframework,dc=org
+objectclass: top
+objectclass: person
+objectclass: organizationalPerson
+objectclass: inetOrgPerson
+uid: user
+sn: Doe
+cn: Jack Doe
+userPassword: $2a$10$dAT.Nf3e7V04aBsrtL5x6ebuBcSeEPBlOZ8lx3DXYCiJcviaokiDO
+
+dn: cn=user,ou=groups,dc=springframework,dc=org
+objectclass: top
+objectclass: groupOfUniqueNames
+cn: user
+uniqueMember: uid=user,ou=people,dc=springframework,dc=org
+uniqueMember: uid=admin,ou=people,dc=springframework,dc=org
+
+dn: cn=admin,ou=groups,dc=springframework,dc=org
+objectclass: top
+objectclass: groupOfUniqueNames
+cn: admin
+uniqueMember: uid=admin,ou=people,dc=springframework,dc=org

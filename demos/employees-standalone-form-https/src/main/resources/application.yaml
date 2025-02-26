@@ -1,0 +1,46 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/employees
+    username: employees
+    password: employees
+  jpa:
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/db-changelog.yaml
+#  ssl:
+#    bundle:
+#      pem:
+#        demo:
+#          reload-on-update: true
+#          keystore:
+#            certificate: "certs/demo.crt"
+#            private-key: "certs/demo.key"
+  ssl:
+    bundle:
+      jks:
+        demo:
+          reload-on-update: true
+          keystore:
+            location: certs/demo.p12
+            password: changeit
+            type: PKCS12
+#  security:
+#    user:
+#      name: user
+#      password: user
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+
+logging:
+  level:
+    employees: DEBUG
+    org.hibernate.SQL: TRACE
+server:
+  ssl:
+    bundle: "demo"
+  port: 8443
+

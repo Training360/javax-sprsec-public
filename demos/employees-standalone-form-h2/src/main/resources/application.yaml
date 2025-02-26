@@ -1,0 +1,26 @@
+spring:
+#  datasource:
+#    url: jdbc:postgresql://localhost:5432/employees
+#    username: employees
+#    password: employees
+  jpa:
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/db-changelog.yaml
+#  security:
+#    user:
+#      name: user
+#      password: user
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+
+logging:
+  level:
+    employees: DEBUG
+    org.hibernate.SQL: TRACE
+
+

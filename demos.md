@@ -33,9 +33,12 @@ docker run -d -e POSTGRES_DB=employees -e POSTGRES_USER=employees -e POSTGRES_PA
 * Sikeres bejelentkezés, `user` felhasználóval
 * Kijelentkezés, `/logout` címen
 
-```properties
-spring.security.user.name=user
-spring.security.user.password=user
+```yaml
+spring:
+  security:
+    user:
+      name: user
+      password: user
 ```
 
 ## Felhasználók tárolása a memóriában
@@ -71,6 +74,8 @@ public class SecurityConfig {
 
 ## Oldalak védelme URL alapján
 
+`SecurityConfig`
+
 * `@EnableWebSecurity`
 
 ```java
@@ -81,7 +86,7 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
                     registry -> registry
                             .requestMatchers("/login")
                             .permitAll()
-                            .requestMatchers("/employees")
+                            .requestMatchers("/")
                             .hasRole("USER")
                             .requestMatchers("/create-employee")
                             .hasRole("ADMIN")
@@ -100,6 +105,87 @@ var user = users
         .password("user")
 *        .authorities("ROLE_USER")
         .build();
+var admin = users
+                .username("admin")
+                .password("admin")
+*                .authorities("ROLE_USER", "ROLE_ADMIN")
+                .build();
+```
+
+## Lokalizáció
+
+`spring-security-core.jar` `org/springframework/security/messages*.properties`
+
+* `SecurityConfig`
+
+```java
+@Bean
+public LocaleResolver localeResolver() {
+    return new FixedLocaleResolver(new Locale("hu", "HU"));
+}
+```
+
+Settings / Editor / File Encodings / Transparent native-to-ascii conversion 
+
+* `src/main/resources/org/springframework/security/messages_hu.properties`
+
+```conf
+AbstractUserDetailsAuthenticationProvider.badCredentials=Hibás felhasználónév és/vagy jelszó
+```
+
+## Fejlécek
+
+ ```plain
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Expires: 0
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+X-Xss-Protection: 0
+```
+
+* Beállítja, hogy ne legyen cache-elhető a válasz
+* `X-Content-Type-Options`: böngésző ne próbálja meg kitalálni a válasz típusát (pl. jpg kiterjesztéssel JavaScriptet töltenek fel)
+* `X-Frame-Options`: clickjacking, pl. a támadó a banki weboldalt egy frame-ben jeleníti meg, de elrejti, és a felhasználó nem is tudja, hogy valójában a banki oldalon klikkelget
+* `X-XSS-Protection`: legacy böngészőknál volt használatos, deprecated, OWASP ajánlás 0-ra állítani. Reflected Cross site scripting (XSS) támadás ellen. Helyette már a `Content-Security-Policy` header használatos, mellyel finoman lehet szabályozni, hogy mit és honnan lehet betölteni
+
+## 404-es oldal védelme
+
+* Ha nincs bejelentkezve átirányít
+* Ha be van jelentkezve, 403-as státusszal tér vissza
+
+## Hibaoldal védelme
+
+* `EmployeesController.listEmployees()` metódusban
+
+```java
+throw new IllegalStateException("Illegal state");
+```
+
+* 403
+
+```java
+.requestMatchers("/login", "/error")
+.permitAll()
+```
+
+* Tegyük megjegyzésbe a hiba dobást
+
+## Tűzfal az érvénytelen kérések kiszűrésére
+
+* `StrictHttpFirewall` implements `HttpFirewall`
+
+```shell
+curl --path-as-is http://localhost:8080/create-employees/../admin
+```
+
+Ugyanis a böngésző és a `curl` is normalizál alapból.
+
+```java
+@Bean
+public HttpFirewall httpFirewall() {
+    return new StrictHttpFirewall();
+}
 ```
 
 ## Felhasználók beolvasása JDBC-vel
@@ -493,6 +579,39 @@ public List<EmployeeModel> listEmployees() {
 
 * Debug módban: `UsernamePasswordAuthenticationToken`
 
+## Saját annotáció felhasználó lekérdezésére
+
+* `EmployeesController.listEmployees()`
+
+* `Principal` paraméter esetén a `User` lekérdezésekor castolni kéne
+* Működik az `Authentication` típussal is
+
+```java
+@AuthenticationPrincipal User user
+```
+
+```java
+@CurrentSecurityContext(expression = "authentication.principal") User user
+```
+
+```java
+@CurrentSecurityContext(expression = "authentication.principal.username") String username
+```
+
+* A `@CurrentSecurityContext` ún. meta-annotációként is használható
+
+```java
+@Target(ElementType.PARAMETER)
+@Retention(RetentionPolicy.RUNTIME)
+@CurrentSecurityContext(expression="authentication.principal.username")
+public @interface CurrentUsername {
+}
+```
+
+```java
+@CurrentUsername String username
+```
+
 ## Metódus szinű jogosultságkezelés
 
 * `SecurityConfig`
@@ -518,7 +637,7 @@ public List<EmployeeModel> listEmployees() {
 ```
 
 * További Springes annotációk: `@PreAuthorize`, `@PostAuthorize`, `@PreFilter`, `@PostFilter`, támogatják az SpEL-t
-* `@EnableMethodSecurity(prePostEnabled=true)`
+* `@EnableMethodSecurity`, `prePostEnabled` alapértelmezett értéke `true`
 
 ## Metódus szinű jogosultságkezelés integrációs tesztelése
 
@@ -543,7 +662,718 @@ SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthent
 @WithMockUser(username = "johndoe", roles = {"USER", "ADMIN"})
 ```
 
-# OAuth 2.0 és OIDC használata
+## Paraméterek és visszatérési értékek ellenőrzése
+
+* `owner` mező bevezetése
+  
+`Employee`
+
+```java
+private String owner;
+
+public Employee(String name, String owner) {
+        this.name = name;
+        this.owner = owner;
+}
+```
+
+`\src\main\resources\db\db-changelog.yaml`
+
+```yaml
+  - changeSet:
+      id: 03-owner
+      author: trainer
+      changes:
+        - sqlFile:
+            path: 03-owner.sql
+            relativeToChangelogFile: true
+```
+
+`\src\main\resources\db\03-owner.sql`
+
+```sql
+alter table employees add owner varchar(255);
+
+insert into users(username, password) values ('admin2', '$2a$10$zDd7RskqB5p1wRXAxRrpF.zFDYFI8d6iEbUZBjw1ZjfkeO3j8YmEO');
+insert into authorities(user_id, authority) values ((select id from users where username = 'admin2'), 'ROLE_USER');
+insert into authorities(user_id, authority) values ((select id from users where username = 'admin2'), 'ROLE_ADMIN');
+```
+
+`EmployeeModel`
+
+```java
+private String owner;
+```
+
+`EmployeesRepository`
+
+```java
+@Query("select new employees.EmployeeModel(e.id, e.name, e.owner) from Employee e")
+```
+
+`EmployeesService`
+
+```java
+public EmployeeModel createEmployee(EmployeeModel command, String owner) {
+  var employee = new Employee(command.getName(), owner);
+```
+
+```java
+private EmployeeModel toDto(Employee employee) {
+    return new EmployeeModel(employee.getId(), employee.getName(), employee.getOwner());
+}
+```
+
+`EmployeesController`
+
+```java
+public ModelAndView createEmployeePost(@ModelAttribute EmployeeModel command,
+                                        @CurrentUsername String username) {
+    employeesService.createEmployee(command, username);
+    // ...
+}
+```
+
+`EmployeesService`
+
+Ez nem kerül meghívásra:
+
+```java
+@PostAuthorize("returnObject.owner == authentication.name")
+public EmployeeModel findEmployeeById(long id) {
+```
+
+Ez igen:
+
+```java
+@PostFilter("filterObject.owner == authentication.name")
+public List<EmployeeModel> listEmployees() {
+```
+
+## Spring Data integráció
+
+`@PostFilter` comment
+
+* `pom.xml`
+
+```xml
+<dependency>
+  <groupId>org.springframework.security</groupId>
+  <artifactId>spring-security-data</artifactId>
+</dependency>
+```
+
+* `EmployeesRepository`
+
+```java
+@Query("select new employees.EmployeeModel(e.id, e.name, e.owner) from Employee e where e.owner = ?#{authentication.name}")
+List<EmployeeModel> findAllResources();
+```
+
+# H2 Console önálló webes alkalmazásban
+
+## H2 Console biztonságossá tétele külön FilterChainnel
+
+* `pom.xml`-ben PostgreSQL, H2, `org.springframework.boot:spring-boot-devtools`
+* `application.yaml`, `spring.datasource` törlése
+
+```
+org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'org.springframework.security.config.annotation.web.configuration.WebSecurityConfiguration': Unsatisfied dependency expressed through method 'setFilterChains' parameter 0: Error creating bean with name 'filterChain' defined in class path resource [employees/SecurityConfig.class]: Failed to instantiate [org.springframework.security.web.SecurityFilterChain]: Factory method 'filterChain' threw exception with message: This method cannot decide whether these patterns are Spring MVC patterns or not. If this endpoint is a Spring MVC endpoint, please use requestMatchers(MvcRequestMatcher); otherwise, please use requestMatchers(AntPathRequestMatcher).
+
+This is because there is more than one mappable servlet in your servlet context: {org.h2.server.web.JakartaWebServlet=[/h2-console/*], org.springframework.web.servlet.DispatcherServlet=[/]}.
+```
+
+* `SecurityConfig`
+
+* `filterChain()` metódusban
+
+* `HandlerMappingIntrospector` paraméter és `MvcRequestMatcher.Builder`:
+
+```java
+public SecurityFilterChain filterChain(HttpSecurity http, HandlerMappingIntrospector introspector) throws Exception {
+        var mvcMatcherBuilder = new MvcRequestMatcher.Builder(introspector);
+}
+```
+
+```java
+.securityMatcher("/**")
+```
+
+* Az összes `requestMatchers()` paramétereként
+
+```java
+.authorizeHttpRequests(
+                      registry -> registry
+                              .requestMatchers(mvcMatcherBuilder.pattern("/login"))
+                              .permitAll()
+                              .requestMatchers(mvcMatcherBuilder.pattern("/"))
+                              .hasRole("USER")
+                              .requestMatchers(mvcMatcherBuilder.pattern("/create-employee"))
+                              .hasRole("ADMIN")
+                              .requestMatchers(mvcMatcherBuilder.pattern("/error"))
+                              .permitAll()
+                              .anyRequest()
+                              .denyAll()
+              )
+```
+
+`actuatorFilterChain()` metódusban
+
+* `HandlerMappingIntrospector` paraméter és `MvcRequestMatcher.Builder`:
+
+```java
+.requestMatchers(mvcMatcherBuilder.pattern("/**"))
+```
+
+* `h2FilterChain()` metódus
+
+```java
+@Bean
+@Order(1)
+public SecurityFilterChain h2FilterChain(HttpSecurity http) throws Exception {
+    http
+            .securityMatcher(AntPathRequestMatcher.antMatcher("/h2-console/**"))
+            .authorizeHttpRequests(
+                    registry -> registry
+                            .requestMatchers(AntPathRequestMatcher.antMatcher("/h2-console/**"))
+                            .permitAll()
+            )
+            .csrf(csrf -> csrf.ignoringRequestMatchers(AntPathRequestMatcher.antMatcher("/h2-console/**")))
+            .headers(headers -> headers.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable))
+            ;
+
+    return http.build();
+}
+```
+
+* Order beállítása: `h2FilterChain`, `actuatorFilterChain`, `filterChain`
+
+# Remember me
+
+## Hash-Based Token
+
+* `SecurityConfig`
+
+```java
+.rememberMe(Customizer.withDefaults())
+```
+
+* `login.html`
+
+```html
+<input type="checkbox" name="remember-me" />
+```
+
+* Bejelentkezés
+* Developer Toolbar / Application / Cookies
+  * `JSESSIONID` törlése
+  * `remember-me`
+  * `remember-me` és `JSESSIONID` törlése
+
+## Persistent Token JDBC-vel
+
+* `SecurityConfig`
+
+```java
+@Bean
+public PersistentTokenRepository tokenRepository(DataSource dataSource) {
+    var repo = new JdbcTokenRepositoryImpl();
+    repo.setDataSource(dataSource);
+    return repo;
+}
+```
+
+```java
+.rememberMe(conf -> conf.tokenRepository(tokenRepository))
+```
+
+* `db-changelog.yaml`
+
+```yaml
+  - changeSet:
+      id: 04-persistence-logins
+      author: trainer
+      changes:
+        - sqlFile:
+            path: 04-persistence-logins.sql
+            relativeToChangelogFile: true
+```
+
+* `03-persistence-logins.sql`
+
+```sql
+create table persistent_logins (username varchar(64) not null,
+                                series varchar(64) primary key,
+                                token varchar(64) not null,
+                                last_used timestamp not null);
+```
+
+# Események
+
+## Authentication events
+
+`DefaultAuthenticationEventPublisher` dob `AuthenticationSuccessEvent` eseményt sikeres esetben,
+vagy exception esetén valamely `AbstractAuthenticationFailureEvent` leszármazottat.
+
+```java
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.actuate.audit.AuditEvent;
+import org.springframework.boot.actuate.audit.listener.AuditApplicationEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.security.authentication.event.AbstractAuthenticationEvent;
+import org.springframework.security.authorization.event.AuthorizationEvent;
+import org.springframework.stereotype.Component;
+
+@Component
+@Slf4j
+public class MyEventHandler {
+
+    @EventListener
+    public void handle(AbstractAuthenticationEvent event) {
+        log.info("Event: {}", event);
+    }
+}
+```
+
+## Authorization events
+
+* `MyAuthorizationEventHandler`
+
+```java
+@Bean
+public AuthorizationEventPublisher authorizationEventPublisher(ApplicationEventPublisher eventPublisher) {
+    return new SpringAuthorizationEventPublisher(eventPublisher);
+}
+```
+
+```java
+@EventListener
+public void handle(AuthorizationEvent event) {
+    log.info("Event: {}", event);
+}
+```
+
+## Granted authorization events
+
+* `MyAuthorizationEventPublisher`
+
+```java
+@Component
+public class MyAuthorizationEventPublisher implements AuthorizationEventPublisher {
+
+    private final ApplicationEventPublisher eventPublisher;
+
+    private final AuthorizationEventPublisher authorizationEventPublisher;
+
+    public MyAuthorizationEventPublisher(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
+        this.authorizationEventPublisher = new SpringAuthorizationEventPublisher(eventPublisher);
+    }
+
+    @Override
+    public <T> void publishAuthorizationEvent(Supplier<Authentication> authentication, T object, AuthorizationDecision decision) {
+        if (decision == null) {
+            return;
+        }
+        if (!decision.isGranted()) {
+            authorizationEventPublisher.publishAuthorizationEvent(authentication, object, decision);
+        }
+        else if (shouldThisEventBePublished(decision)) {
+            AuthorizationGrantedEvent event = new AuthorizationGrantedEvent(
+                    authentication, object, decision
+            );
+            eventPublisher.publishEvent(event);
+        }
+    }
+
+    private boolean shouldThisEventBePublished(AuthorizationDecision decision) {
+        if (decision instanceof AuthorityAuthorizationDecision authorityAuthorizationDecision) {
+            boolean any = authorityAuthorizationDecision.getAuthorities().stream()
+                    .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+            return any;
+        } else {
+            return false;
+        }
+
+    }
+}
+```
+
+## Audit events
+
+* `SecurityConfig`
+
+```java
+@Bean
+public AuditEventRepository auditEventRepository() {
+    return new InMemoryAuditEventRepository();
+}
+```
+
+* `MyEventHandler`
+
+```java
+@EventListener
+public void handle(AuditApplicationEvent event) {
+    log.info("Audit: {}", event);
+}
+```
+
+* Actuator: http://localhost:8080/actuator
+
+# Observability
+
+## Tracing
+
+* Zipkin indítása
+
+```shell
+docker run -d -p 9411:9411 --name zipkin openzipkin/zipkin
+```
+
+* `pom.xml`
+
+```xml
+<dependency>
+  <groupId>io.micrometer</groupId>
+  <artifactId>micrometer-tracing-bridge-brave</artifactId>
+</dependency>
+<dependency>
+  <groupId>io.zipkin.reporter2</groupId>
+  <artifactId>zipkin-reporter-brave</artifactId>
+</dependency>
+```
+
+* `application.yaml`
+
+```yaml
+management:
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+```
+
+* Zipkin felületén a trace-ek keresése, részletek megjelenítése: http://localhost:9411
+  * filter chain
+  * AuthenticationManager
+  * AuthorizationManager
+
+# HTTPS
+
+## HTTPS PEM formátumú kulcsokkal
+
+```shell
+mkdir certs
+cd certs
+openssl req -x509 -subj "/CN=demo-cert-1" -keyout demo.key -out demo.crt -sha256 -days 365 -nodes -newkey rsa 
+ls -la
+cp * /mnt/c/trainings/employees-standalone-form-https/certs/
+```
+
+Az `openssl req` parancs ezzel a hívással egy önaláírt X.509 tanúsítványt (`.crt`) és egy hozzá tartozó privát kulcsot (`.key`) generál. Nézzük végig a paramétereket egyenként:
+
+* `-x509`
+  * Egy önaláírt (self-signed) tanúsítványt generál X.509 formátumban.
+* `-subj "/CN=demo-cert-1"`
+  * A tanúsítvány alanyát (subject) adja meg.
+  * `CN` (Common Name) a tanúsítvány neve, itt `demo-cert-1`.
+* `-keyout demo.key`
+  * A privát kulcs fájlba mentését adja meg (`demo.key` fájlba kerül).
+* `-out demo.crt`
+  * Az elkészült tanúsítvány fájlba mentését adja meg (`demo.crt` fájlba kerül).
+* `-sha256`
+  * SHA-256 hash algoritmust használ a tanúsítvány aláírásához.
+* `-days 365`
+  * A tanúsítvány érvényességi ideje 365 nap.
+* `-nodes` (no DES encryption)
+  * A privát kulcs nem lesz jelszóval titkosítva.
+* `-newkey rsa`
+  * Egy új RSA kulcspárt generál.
+
+* `application.yaml`
+
+```yaml
+spring:
+  ssl:
+    bundle:
+      pem:
+        demo:
+          keystore:
+            certificate: "certs/demo.crt"
+            private-key: "certs/demo.key"
+
+```
+
+```yaml
+server:
+  ssl:
+    bundle: "demo"
+  port: 8443
+```
+
+```plain
+2024-01-19T17:02:27.925+01:00  INFO 3184 --- [           main] o.a.t.util.net.NioEndpoint.certificate   : Connector [https-jsse-nio-8443], TLS virtual host [_default_], certificate type [UNDEFINED] configured from keystore [C:\Users\iviczian\.keystore] using alias [tomcat] with trust store [null]
+```
+
+## Kulcsok újratöltése újraindítás nélkül
+
+Spring Boot 3.2, újratöltés
+
+* `pom.xml`
+
+```xml
+<parent>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-parent</artifactId>
+  <version>3.2.1</version>
+  <relativePath/> <!-- lookup parent from repository -->
+</parent>
+```
+
+```yaml
+spring:
+  ssl:
+    bundle:
+      pem:
+        demo:
+*          reload-on-update: true
+          keystore:
+            certificate: "certs/demo.crt"
+            private-key: "certs/demo.key"
+```
+
+```shell
+openssl req -x509 -subj "/CN=demo-cert-2" -keyout demo.key -out demo.crt -sha256 -days 365 -nodes -newkey rsa 
+cp * /mnt/c/trainings/employees-standalone-form-https/certs/
+```
+
+Csak inkognitó ablakkal működik: https://localhost:8443/
+
+## HTTPS PKCS#12 kulcstárral
+
+```shell
+keytool -genkeypair -alias demo -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore demo.p12 -validity 3650
+```
+
+* `application.yaml`
+
+```yaml
+spring:
+  ssl.bundle.jks:
+    demo:
+      key:
+        alias: demo
+      reload-on-update: true
+      keystore:
+        location: demo.p12
+        password: changeit
+        type: PKCS12
+```
+
+```yaml
+server:
+  ssl:
+    bundle: demo
+  port: 8443
+```
+
+## HTTP Strict Transport Security (HSTS)
+
+`Strict-Transport-Security: max-age=31536000 ; includeSubDomains` header
+
+Egy évig amennyiben kérés az adott hostra megy, mindig HTTPS-en keresztül menjen.
+(Hiába van átirányítás, az első http kérést a támadók elkaphatják Man-in-the-Middle támadási móddal, és
+rossz helyre irányíthatják át a felhasználó böngészőjét.)
+
+# Cross Site Request Forgery (CSRF)
+
+## Cross Site Request Forgery (CSRF)
+
+Támadó az adott oldalra POST-ol. Megoldás: egyedi token generálása, és a POST esetén ellenőrzés.
+Tokent valahol tárolni kell, ez alapesetben a session.
+
+* Böngészőben login oldal
+  * Alkalmazás újraindítása
+  * BREACH támadás elleni védelem miatt a Spring Security minden kérésnél CSRF tokent maszkolja, véletlen értéket tesz bele. Visszaküldéskor kinyeri belőle az eredeti tokent.
+* Böngészőben `/create-employee` oldal (adminként)
+  * Vizsgálat, token átírása
+
+# Content Security Policy (CSP)
+
+## Content Security Policy (CSP)
+
+`employees-standalone-form` -> `employees-standalone-form-csp`
+
+* `/page/index.html`, `/page/script.js`
+
+```javascript
+console.log("hello world")
+```
+
+* Run `index.html`
+
+* `employees.html`
+
+```html
+<script src="http://localhost:63342/employees-standalone-form-csp/page/script.js"></script>
+```
+
+* `SecurityConfig`
+
+```java
+.headers(headers -> headers.contentSecurityPolicy(policy -> policy.policyDirectives("script-src 'self'")))
+```
+
+```plain
+Refused to load the script 'script.js' because it violates the following Content Security Policy directive:
+"script-src 'self'".
+```
+
+# LDAP
+
+## LDAP
+
+* `pom.xml`
+
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+
+<dependency>
+  <groupId>com.unboundid</groupId>
+  <artifactId>unboundid-ldapsdk</artifactId>
+  <version>6.0.11</version>
+  <scope>runtime</scope>
+</dependency>
+
+<dependency>
+  <groupId>org.springframework.ldap</groupId>
+  <artifactId>spring-ldap-core</artifactId>
+</dependency>
+
+<dependency>
+  <groupId>org.springframework.security</groupId>
+  <artifactId>spring-security-ldap</artifactId>
+</dependency>
+```
+
+* `application.yaml`
+
+```yaml
+spring:
+  ldap:
+    embedded:
+      ldif: classpath:users.ldif
+      base-dn: dc=springframework,dc=org
+      port: 8389
+```
+
+
+* `src/main/resources/users.ldif`
+
+```ldif
+dn: dc=springframework,dc=org
+objectclass: top
+objectclass: domain
+objectclass: extensibleObject
+dc: springframework
+
+dn: ou=groups,dc=springframework,dc=org
+objectclass: top
+objectclass: organizationalUnit
+ou: groups
+
+dn: ou=people,dc=springframework,dc=org
+objectclass: top
+objectclass: organizationalUnit
+ou: people
+
+dn: uid=admin,ou=people,dc=springframework,dc=org
+objectclass: top
+objectclass: person
+objectclass: organizationalPerson
+objectclass: inetOrgPerson
+uid: admin
+cn: John Doe
+sn: Doe
+userPassword: $2a$10$zDd7RskqB5p1wRXAxRrpF.zFDYFI8d6iEbUZBjw1ZjfkeO3j8YmEO
+
+dn: uid=user,ou=people,dc=springframework,dc=org
+objectclass: top
+objectclass: person
+objectclass: organizationalPerson
+objectclass: inetOrgPerson
+uid: user
+sn: Doe
+cn: Jack Doe
+userPassword: $2a$10$dAT.Nf3e7V04aBsrtL5x6ebuBcSeEPBlOZ8lx3DXYCiJcviaokiDO
+
+dn: cn=user,ou=groups,dc=springframework,dc=org
+objectclass: top
+objectclass: groupOfUniqueNames
+cn: user
+uniqueMember: uid=user,ou=people,dc=springframework,dc=org
+uniqueMember: uid=admin,ou=people,dc=springframework,dc=org
+
+dn: cn=admin,ou=groups,dc=springframework,dc=org
+objectclass: top
+objectclass: groupOfUniqueNames
+cn: admin
+uniqueMember: uid=admin,ou=people,dc=springframework,dc=org
+```
+
+LDAP:
+
+* Fa hierarchia, benne bejegyzések
+* Distinguished name (DN): bejegyzés neve és helye a fában
+* Object classes: milyen attribútumai lehetnek egy bejegyzésnek
+* Attribute
+  * CN = Common Name
+  * OU = Organizational Unit
+  * DC = Domain Component
+  * UID = user id
+  * SN = surname, vezetéknév
+* LDAP data Interchange Format (LDIF)
+
+* `SecurityConfig`
+
+```java
+@Configuration(proxyBeanMethods = false)
+public class SecurityConfig {
+
+    @Bean
+    public AuthenticationManager ldapAuthenticationManager(
+            BaseLdapPathContextSource contextSource, PasswordEncoder passwordEncoder, LdapAuthoritiesPopulator ldapAuthoritiesPopulator) {
+        LdapPasswordComparisonAuthenticationManagerFactory  factory =
+                new LdapPasswordComparisonAuthenticationManagerFactory(contextSource, passwordEncoder);
+        factory.setUserDnPatterns("uid={0},ou=people,dc=springframework,dc=org");
+        factory.setUserDetailsContextMapper(new PersonContextMapper());
+        factory.setContextSource(contextSource);
+        factory.setLdapAuthoritiesPopulator(ldapAuthoritiesPopulator);
+        return factory.createAuthenticationManager();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public LdapAuthoritiesPopulator authorities(BaseLdapPathContextSource contextSource) {
+        String groupSearchBase = "ou=groups,dc=springframework,dc=org";
+        DefaultLdapAuthoritiesPopulator authorities =
+                new DefaultLdapAuthoritiesPopulator(contextSource, groupSearchBase);
+        authorities.setGroupSearchFilter("uniqueMember={0}");
+        return authorities;
+    }
+
+}
+```
+
+# Backend alkalmazás bemutatása
 
 ## Alkalmazás bemutatása - backend
 
@@ -563,6 +1393,223 @@ docker run -d -e POSTGRES_DB=employees -e POSTGRES_USER=employees -e POSTGRES_PA
 * Thymeleaf templates
 * DataSource
 
+# Cross-Origin Resource Sharing (CORS)
+
+## CORS REST hívás esetén
+
+* Böngészők lehetővé teszik bizonyos erőforrások (kép, css, stb.) elérését más
+  domainről
+* Biztonsági okokból azonban JavaScript AJAX hívást nem engedélyezik
+    * Same-origin security policy
+* Cross-origin resource sharing (CORS) egy mechanizmus arra, hogy (akár bizonyos megkötésekkel) engedélyezni lehessen
+* HTTP headerekkel, böngésző oldali támogatás
+
+`employees-backend` -> `employees-backend-cors`
+
+```html
+<h1>Employees app</h1>
+
+<ul id="employees-ul"></ul>
+
+<script src="js/employees.js"></script>
+```
+
+```javascript
+    fetch("http://localhost:8081/api/employees")
+        .then(response => response.json())
+        .then(employees => {
+            const ul = document.querySelector("#employees-ul")
+            for (const employee of employees) {
+                ul.innerHTML += `<li>${employee.name}</li>`
+            }
+        });
+```
+
+* `@CrossOrigin` annotáció a controller osztályon vagy metóduson
+* `WebMvcConfigurer`
+* Filter
+
+```java
+@Configuration(proxyBeanMethods = false)
+public class WebConfiguration  implements WebMvcConfigurer {
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+                .allowedOrigins("*");
+    }
+}
+```
+
+## CORS Actuator esetén
+
+```html
+<div id="status-div"></div>
+```
+
+```javascript
+fetch("http://localhost:8081/actuator/health")
+.then(response => response.json())
+.then(health => {
+    const div = document.querySelector("#status-div");
+    div.innerHTML = health.status;
+});
+```
+
+```yaml
+management:
+  endpoints:
+    web:
+      cors:
+        allowed-origins: '*'
+```
+
+# Backend alkalmazás JWT használatával
+
+## Backend alkalmazás JWT használatával - bevezetés
+
+* Felhasználónév és jelszó alapján kap egy tokent
+  * Long term credential - erőforrásigényes az ellenőrzése
+  * Short term credential - pl. session vagy token
+* Tokent az alkalmazás állítja ki, nem authentication server
+* Non-opaque token
+* JSON, elektronikusan aláírva
+
+## Basic authentication
+
+`employees-backend` -> `employees-backend-jwt`
+
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+</dependency>
+```
+
+```java
+@Configuration(proxyBeanMethods = false)
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .authorizeHttpRequests((authorize) -> authorize
+                        .anyRequest().authenticated()
+                )
+                .csrf(AbstractHttpConfigurer::disable)
+                .httpBasic(Customizer.withDefaults())
+                .sessionManagement((session) -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        return http.build();
+    }
+
+    @Bean
+    public UserDetailsService users() {
+        return new InMemoryUserDetailsManager(
+                User.withUsername("user")
+                        .password("{noop}user")
+                        .roles("USER")
+                        .build()
+        );
+    }
+
+}
+```
+
+## JWT token előállítása
+
+```java
+@Configuration(proxyBeanMethods = false)
+public class SecurityConfig {
+
+    // HS256 HMAC using SHA-256 hash algorithm
+    // Szimmetrikus kulcsú algoritmus
+    // JSON Web Key: `JWK` absztrakt ősosztály, implementációi `RSAKey`, `ECKeys`, `OctetKeyPair`, `OctetSequenceKey`, such as an AES or HMAC secret.
+    private OctetSequenceKey jwk = new OctetSequenceKey.Builder(Base64URL.from("eQHD2h293EzWJtGdZ3cb2KmLV3gTxSyna-NeHKCwZ4s"))
+            .build();
+
+
+    @Bean
+    public JwtEncoder jwtEncoder() {
+        JWKSource<SecurityContext> jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
+        return new NimbusJwtEncoder(jwks);
+    }
+
+}
+```
+
+```java
+@RestController
+@AllArgsConstructor
+public class TokenController {
+
+    private JwtEncoder encoder;
+
+    @GetMapping("/token")
+    public String token(Authentication authentication) {
+        Instant now = Instant.now();
+        String scope = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.joining(" "));
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .issuer("self")
+                .issuedAt(now)
+                .expiresAt(now.plus(30, ChronoUnit.MINUTES))
+                .subject(authentication.getName())
+                .claim("scope", scope)
+                .build();
+        var header = JwsHeader.with(MacAlgorithm.HS256).build();
+        return this.encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+    }
+}
+```
+
+# JWT token beolvasása
+
+```java
+@Bean
+public JwtDecoder jwtDecoder() {
+    return NimbusJwtDecoder.withSecretKey(jwk.toSecretKey()).build();
+}
+```
+
+```java
+.oauth2ResourceServer(conf -> conf.jwt(Customizer.withDefaults()))
+.exceptionHandling((exceptions) -> exceptions
+        .authenticationEntryPoint(new BearerTokenAuthenticationEntryPoint())
+        .accessDeniedHandler(new BearerTokenAccessDeniedHandler())
+)
+```
+
+* Listázás
+
+```http
+GET http://localhost:8081/api/employees
+Accept: application/json
+```
+
+```
+HTTP/1.1 401 
+WWW-Authenticate: Bearer
+```
+
+* Token lekérés
+
+```http
+GET http://localhost:8081/token
+Authorization: Basic user user
+```
+
+https://jwt.io/
+
+* Token használat:
+
+```http
+GET http://localhost:8081/api/employees
+Authorization: Bearer eyJraWQiOiIx...
+```
+
+# OAuth 2.0 és OIDC használata
+
 ## Alkalmazás bemutatása - frontend
 
 * Spring Boot alkalmazás, `pom.xml`
@@ -578,7 +1625,7 @@ docker run -d -e POSTGRES_DB=employees -e POSTGRES_USER=employees -e POSTGRES_PA
 # KeyCloak indítása és konfigurálása
 
 ```shell
-docker run -d -e KEYCLOAK_USER=admin -e KEYCLOAK_PASSWORD=admin -p 8090:8080 --name keycloak jboss/keycloak
+docker run -d -p 8090:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin --name keycloak quay.io/keycloak/keycloak start-dev
 ```
 
 * `http://localhost:8090` címen elérhető, `admin` / `admin`
@@ -590,26 +1637,28 @@ docker run -d -e KEYCLOAK_USER=admin -e KEYCLOAK_PASSWORD=admin -p 8090:8080 --n
 
 ## KeyCloak URL-ek
 
+> Figyelem: Az összes URL-ből eltávolítandó az `/auth` rész!
+
 * Konfiguráció leírása
 
 ```
-http://localhost:8090/auth/realms/EmployeesRealm/.well-known/openid-configuration
+http://localhost:8090/realms/EmployeesRealm/.well-known/openid-configuration
 ```
 
 * Tanúsítványok
 
 ```
-http://localhost:8090/auth/realms/EmployeesRealm/protocol/openid-connect/certs
+http://localhost:8090/realms/EmployeesRealm/protocol/openid-connect/certs
 ```
 
 * Token lekérése Resource owner password credentials használatával
 
 ```shell
-curl -s --data "grant_type=password&client_id=employees-frontend&username=johndoe&password=johndoe" http://localhost:8090/auth/realms/EmployeesRealm/protocol/openid-connect/token | jq
+curl -s --data "grant_type=password&client_id=employees-frontend&username=johndoe&password=johndoe" http://localhost:8090/realms/EmployeesRealm/protocol/openid-connect/token | jq
 ```
 
 ```http
-POST http://localhost:8090/auth/realms/EmployeesRealm/protocol/openid-connect/token
+POST http://localhost:8090/realms/EmployeesRealm/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=password&client_id=employees-frontend&username=johndoe&password=johndoe
@@ -678,7 +1727,7 @@ spring:
             scope: openid,email,profile
         provider:
           keycloak:
-            issuer-uri: http://localhost:8090/auth/realms/EmployeesRealm
+            issuer-uri: http://localhost:8090/realms/EmployeesRealm
 ```
 
 * `EmployeesController`
@@ -693,8 +1742,8 @@ public ModelAndView listEmployees(Principal principal) {
 
 * Frontend újraindítás után is bejelentkezve marad
 
-* Logout: `http://localhost:8090/auth/realms/EmployeesRealm/protocol/openid-connect/logout?redirect_uri=http://localhost:8080`
-* Account Management: `http://localhost:8090/auth/realms/EmployeesRealm/account`
+* Logout: `http://localhost:8090/realms/EmployeesRealm/protocol/openid-connect/logout?redirect_uri=http://localhost:8080`
+* Account Management: `http://localhost:8090/realms/EmployeesRealm/account`
 
 ## Alternatív felhasználónév használata
 
@@ -754,7 +1803,7 @@ public GrantedAuthoritiesMapper userAuthoritiesMapper() {
 }
 ```
 
-# Access token továbbítása a backend felé
+## Access token továbbítása a backend felé
 
 * `SecurityConfig`
 
@@ -813,7 +1862,12 @@ public List<EmployeeResource> listEmployees(@RequestHeader HttpHeaders headers) 
 Headers: [accept-encoding:"gzip", user-agent:"ReactorNetty/1.1.12", host:"localhost:8081", accept:"*/*", authorization:"Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICItcHJuVjJOWFk5ZjBlYnR4VDRySzdQRHo3X0NoMjc0WkhjbHVwejV6dDFZIn0.eyJleHAiOjE3MDE3MDMyMjMsImlhdCI6MTcwMTcwMjkyMywiYXV0aF90aW1lIjoxNzAxNzAxOTIxLCJqdGkiOiIyMzg1MjQzOC1hMDg0LTRjMDItODJmNi0wY2RlOGU3ODgzOTgiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwOTAvYXV0aC9yZWFsbXMvRW1wbG95ZWVzUmVhbG0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNmNlNTcyNmItMDc0Mi00M2RjLWJkNDYtYjAwOWExYmFjZWI5IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiZW1wbG95ZWVzLWZyb250ZW5kIiwibm9uY2UiOiIyWERGeU80ZHlXVjl1THd2WHJQU2E3U09Lb1djVjZURU44cVRBM2JBZmI0Iiwic2Vzc2lvbl9zdGF0ZSI6ImI1MDY4NmViLThkZTgtNDkxYS05MGZhLWFlZGY1NjgzOTU0NiIsImFjciI6IjAiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiIsImRlZmF1bHQtcm9sZXMtZW1wbG95ZWVzcmVhbG0iLCJlbXBsb3llZXNfdXNlciJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJtYW5hZ2UtYWNjb3VudC1saW5rcyIsInZpZXctcHJvZmlsZSJdfX0sInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwiLCJzaWQiOiJiNTA2ODZlYi04ZGU4LTQ5MWEtOTBmYS1hZWRmNTY4Mzk1NDYiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicHJlZmVycmVkX3VzZXJuYW1lIjoiam9obmRvZSJ9.NmXHCLgus0vQWnUHK2LlJeHGfBT5X_jneNHjlm9PRT6qHqMF17rMiZXuVSoLewSK3oRATg_7qYH7Gcj0jzJxG8WNeJDp9tIVngd-S_KUGggssJpxHPUDVgY_clI7uQTbhPR6bz1Ye05Pf68M9XpRPkWsin9P73vdsBJ5jOCUioob-zbEkrB7uGCA68MQsSKamdyR8anNun3fqhsqaktbnJtn65uJjIfnigmUixY70T2Ic9OVrNTSIbN8UxX5Gam-92R-Qx61AFJC57HOrVzD6CV-VrFMy7TgRfJRNBS1ty7akB8Ag-bMbSkPfj_Z1Z_f_rCUcVAUfvAq24D9ZwjaVA"]
 ```
 
-# Backend mint Resource Server
+## Access token továbbítása csak bizonyos kéréseknél
+
+* `ClientConfig`
+* `EmployeesController`
+
+## Backend mint Resource Server
 
 ```xml
 <dependency>
@@ -859,7 +1913,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8090/auth/realms/EmployeesRealm
+          issuer-uri: http://localhost:8090/realms/EmployeesRealm
 ```
 
 * `http` fájlból a `POST` kérés: 
@@ -884,7 +1938,7 @@ public List<EmployeeResource> listEmployees(@RequestHeader HttpHeaders headers, 
 JwtAuthenticationToken [Principal=org.springframework.security.oauth2.jwt.Jwt@28b3d686, Credentials=[PROTECTED], Authenticated=true, Details=WebAuthenticationDetails [RemoteIpAddress=127.0.0.1, SessionId=null], Granted Authorities=[SCOPE_openid, SCOPE_profile, SCOPE_email]]
 ```
 
-# Felhasználónév a backenden
+## Felhasználónév a backenden
 
 ```java
 import org.springframework.core.convert.converter.Converter;
@@ -920,7 +1974,7 @@ public JwtDecoder jwtDecoderByIssuerUri(OAuth2ResourceServerProperties propertie
 }
 ```
 
-# Szerepkörök a backenden
+## Szerepkörök a backenden
 
 ```java
 public class KeycloakRealmRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>> {
@@ -953,20 +2007,16 @@ public Converter<Jwt,? extends AbstractAuthenticationToken> jwtAuthenticationCon
 
 ## Eureka Service Discovery
 
-Spring Cloud Eureka projekt létrehozása (`employees-eureka`)
+Spring Cloud Eureka projekt létrehozása (`employees-eureka`), groupId: `training`, package: `employees`
 
 * Netflix Eureka Server függőség
 * `@EnableEurekaServer` annotáció
 
-`application.yaml`
+`application.properties`
 
 ```yaml
-server:
-  port: 8761
-
-spring:
-  application:
-    name: employees-eureka
+spring.application.name=employees-eureka
+server.port=8761
 ```
 
 `employees-frontend` projekt módosítások
@@ -1006,16 +2056,16 @@ spring:
 spring:
   application:
     name: employees-frontend
-``````
+```
 
 ## Spring Cloud Gateway
 
 Spring Cloud Gateway projekt létrehozása (`employees-gateway`)
 
-* Spring Cloud Gateway
+* Spring Cloud Gateway Reactive
 * Eureka Client
 
-```application.yaml
+```yaml
 server:
   port: 8084
 
@@ -1033,18 +2083,6 @@ spring:
 
 `employees-frontend` projekt módosítások
 
-```yaml
-server:
-  forward-headers-strategy: native # ez kell ahhoz, hogy ne a saját portjára, hanem a loadbalancer portjára irányítson  
-spring:
-  security:
-    oauth2:
-      client:
-        registration:
-          keycloak:
-            redirect-uri: http://localhost:8084/login/oauth2/code/ # port átírva a lb-re
-```
-
 * `EmployeesController`
 
 ```java
@@ -1053,7 +2091,32 @@ public ModelAndView listEmployees(Principal principal, @RequestHeader HttpHeader
     log.debug("Headers: {}", headers);
 ```
 
+```yaml
+eureka:
+  instance:
+    hostname: "localhost"
+```
+
+vagy
+
+```yaml
+eureka:
+  instance:
+    prefer-ip-address: true
+```
+
 * `X-Forwarded` headerök ellenőrzése
+
+Második példány elindítása `8082` porton
+
+## Session kiszervezése Redis-re
+
+Problémák:
+
+* Belső átirányítások loadbalancer címek
+* KeyCloak visszairányítás
+* Átirányítások során különböző értékeket kell visszaellenőrizni
+* Bejelentkezett felhasználó
 
 * Átirányításkor átad egy state és egy nonce URL paramétert
     * OAuth 2.0 - átad egy `state` paramétert, melyet utána visszairányításkor URL paraméterként vissza is kap - CSRF ellen
@@ -1064,7 +2127,7 @@ public ModelAndView listEmployees(Principal principal, @RequestHeader HttpHeader
 
 Viszont ez állapot, sessionbe tárolja
 
-## Session kiszervezése Redisre
+KeyCloak megfelelő Redirect URI
 
 ```shell
 docker run -d -p 6379:6379 --name redis redis
@@ -1089,6 +2152,8 @@ docker run -d -p 6379:6379 --name redis redis
 * `application.yaml`, port átírása `8084` értékre
 
 ```yaml
+server:
+  forward-headers-strategy: native # ez kell ahhoz, hogy ne a saját portjára, hanem a loadbalancer portjára irányítson  
 spring:
   security:
     oauth2:
@@ -1098,41 +2163,14 @@ spring:
             redirect-uri: http://localhost:8084/login/oauth2/code/
 ```
 
-```shell
-redis-cli
-keys *
-```
-
 * https://xinghua24.github.io/SpringSecurity/Spring-Security-Spring-Session-Redis/
 * https://docs.spring.io/spring-session/reference/2.7/spring-security.html
 
-# Futtatás Docker Compose-zal
+# OAuth 2.0 és OIDC Spring Authorization Serverrel
 
-```shell
-cd employees-backend
-mvnw clean package
-docker build -t employees-backend .
-mvnw clean package
-cd employees-frontend
-docker build -t employees-frontend .
-cd employees-compose
-docker compose up -d
-```
+## Spring Authorization Server használata
 
-Sajnos a Keycloak nem támogatja azt, hogy külön frontend és backend URL-je legyen.
-
-https://issues.redhat.com/browse/KEYCLOAK-2623
-
-* HTTPS esetén két tanúsítvány szükséges
-* URL bekerül a JWT tokenbe
-* URL bekerül az e-mailbe
-
- Így azt javasolja, hogy `hosts` fájl
-manipulációval mindig ugyanazon a címen legyen elérhető.
-
-## Spring Authentication Server használata
-
-`employees-auth-server` projekt
+`employees-auth-server` projekt, `employees-oauth2-auth-server` könyvtárban
 
 * Authorization Server függőség
 
@@ -1147,11 +2185,6 @@ server:
         name: ASSESSIONID
 
 spring:
-  jpa:
-    open-in-view: false
-    generate-ddl: true
-    defer-datasource-initialization: true
-
   security:
     oauth2:
       authorizationserver:
@@ -1173,28 +2206,39 @@ spring:
               scopes:
                 - "openid"
                 - "profile"
-            require-authorization-consent: true
 ```
 
-`employees-frontend` projekt
+http://localhost:9000/.well-known/openid-configuration
 
-* `application.yaml`
+http://localhost:9000/logout
 
-```yaml
-spring:
-  security:
-    oauth2:
-      client:
-        registration:
-          oidc-client:
-            client-id: oidc-client
-            client-secret: secret
-            authorization-grant-type: authorization_code
-            redirect-uri: http://localhost:8080/login/oauth2/code/oidc-client
-            scope: openid,profile
-        provider:
-          oidc-client:
-            issuer-uri: http://localhost:9000
+## Felhasználók a Spring Authorization Serverben
+
+* `SecurityConfig`
+
+```java
+@Configuration(proxyBeanMethods = false)
+public class SecurityConfig {
+
+    @Bean
+    public UserDetailsService users() {
+        return new InMemoryUserDetailsManager(
+                User.withUsername("user")
+                        .password("{noop}user")
+                        .roles("USER")
+                        .build()
+        );
+    }
+}
+```
+
+## Frontend Spring Authorization Serverrel
+
+```xml
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-oauth2-client</artifactId>
+</dependency>
 ```
 
 ```java
@@ -1227,32 +2271,27 @@ public class SecurityConfig {
 }
 ```
 
-## Felhasználók perzisztálása Spring Authentication Server használatakor
+* `application.yaml`
 
-* Spring Data JPA
-* H2
-* Lombok
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          oidc-client:
+            client-id: oidc-client
+            client-secret: secret
+            authorization-grant-type: authorization_code
+            redirect-uri: http://localhost:8080/login/oauth2/code/oidc-client
+            scope: openid,profile
+        provider:
+          oidc-client:
+            issuer-uri: http://localhost:9000
+```
 
-```java
-package training.employeesauthserver;
+## Constent
 
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
-
-@Configuration(proxyBeanMethods = false)
-public class SecurityConfig {
-
-    @Bean
-    public UserDetailsService users() {
-        var users = User.withDefaultPasswordEncoder();
-        var user = users
-                .username("user")
-                .password("user")
-                .build();
-        return new InMemoryUserDetailsManager(user);
-    }
-}
+```yaml
+            require-authorization-consent: true
 ```
