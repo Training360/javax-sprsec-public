@@ -1204,13 +1204,15 @@ Tokent valahol tárolni kell, ez alapesetben a session.
 
 `employees-standalone-form` -> `employees-standalone-form-csp`
 
+Visual Studio Code / Live server
+
 * `/page/index.html`, `/page/script.js`
 
 ```javascript
 console.log("hello world")
 ```
 
-* Run `index.html`
+* Open in Live Server `index.html`
 
 * `employees.html`
 
