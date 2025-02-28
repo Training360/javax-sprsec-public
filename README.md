@@ -5,9 +5,9 @@ Ez a repository tartalmazza a tanfolyam anyagát.
 A [demos.md](demos.md) fájl tartalmazza a videón szereplő feladatok leírását, bemásolható
 parancsokat és forráskódrészleteket.
 
-A `demos-init` könyvtár tartalmazza a kiindulási projekteket.
+A `demos-initial` könyvtár tartalmazza a kiindulási projekteket.
 
-A `demos` könyvtár tartalmazza a videón szereplő feladatok megoldását.
+A `demos-solutions` könyvtár tartalmazza a videón szereplő feladatok megoldását.
 
 * Önálló webes alkalmazás, bejelentkezés felhasználónév és jelszó megadásával (`employees-standalone-form`)
 * H2 Console önálló webes alkalmazásban (`employees-standalone-form-h2`)
