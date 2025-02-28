@@ -1866,7 +1866,50 @@ Headers: [accept-encoding:"gzip", user-agent:"ReactorNetty/1.1.12", host:"localh
 ## Access token továbbítása csak bizonyos kéréseknél
 
 * `ClientConfig`
+
+```java
+@Bean
+public EmployeesClient employeesClient(WebClient.Builder builder, EmployeesProperties employeesProperties,
+                                        OAuth2AuthorizedClientManager authorizedClientManager) {
+    var webClient = builder
+            .baseUrl(employeesProperties.getBackendUrl())
+            .build();
+    var factory = HttpServiceProxyFactory
+            .builder(WebClientAdapter.forClient(webClient)).build();
+    return factory.createClient(EmployeesClient.class);
+}
+
+@Bean
+public EmployeesClient securedEmployeesClient(WebClient.Builder builder, EmployeesProperties employeesProperties,
+                                        OAuth2AuthorizedClientManager authorizedClientManager) {
+    var oauth2 = new ServletOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
+    oauth2.setDefaultOAuth2AuthorizedClient(true);
+
+    var webClient = builder
+            .baseUrl(employeesProperties.getBackendUrl())
+            .apply(oauth2.oauth2Configuration())
+            .build();
+    var factory = HttpServiceProxyFactory
+            .builder(WebClientAdapter.forClient(webClient)).build();
+    return factory.createClient(EmployeesClient.class);
+}
+```
+
 * `EmployeesController`
+
+```java
+    private EmployeesClient employeesClient;
+
+    private EmployeesClient securedEmployeesClient;
+
+    @PostMapping("/create-employee")
+    public ModelAndView createEmployeePost(@ModelAttribute Employee command) {
+*        securedEmployeesClient.createEmployee(command);
+        return new ModelAndView("redirect:/");
+    }
+
+}
+```
 
 ## Backend mint Resource Server
 
@@ -1917,7 +1960,7 @@ spring:
           issuer-uri: http://localhost:8090/realms/EmployeesRealm
 ```
 
-* `http` fájlból a `POST` kérés: 
+* `http` fájlból a `POST` kérés meghívásakor a következő választ kapjuk: 
 
 ```json
 {
@@ -1942,6 +1985,8 @@ JwtAuthenticationToken [Principal=org.springframework.security.oauth2.jwt.Jwt@28
 ## Felhasználónév a backenden
 
 ```java
+package employees;
+
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.oauth2.jwt.MappedJwtClaimSetConverter;
 
