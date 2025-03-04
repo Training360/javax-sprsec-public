@@ -26,5 +26,5 @@ spring:
             scope: openid,email,profile
         provider:
           keycloak:
-            issuer-uri: http://localhost:8090/auth/realms/EmployeesRealm
+            issuer-uri: http://localhost:8090/realms/EmployeesRealm
             user-name-attribute: preferred_username
