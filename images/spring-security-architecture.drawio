@@ -1,0 +1,43 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36" version="26.0.11">
+  <diagram name="1 oldal" id="1fnrL_hPPvnEPsRtilXS">
+    <mxGraphModel dx="1562" dy="893" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-1" value="FilterChain" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="120" y="160" width="270" height="560" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-3" value="Filter 1." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="140" y="200" width="230" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-4" value="DelegatingFilterProxy" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="140" y="250" width="230" height="400" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-2" value="FilterChainProxy" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="155" y="280" width="195" height="350" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-5" value="SecurityFilterChain 1." style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="170" y="310" width="160" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-7" value="Filter 1." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="340" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-8" value="Filter n." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="390" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-13" value="SecurityFilterChain n." style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="170" y="470" width="160" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-14" value="Filter 1." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="500" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-15" value="Filter n." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="190" y="550" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s8oUj0VtE0vD3BNpf1Z4-16" value="Filter n." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="135" y="660" width="235" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,5 +1,152 @@
 class: inverse, center, middle
 
+# Spring Security általános bemutatása
+
+## &nbsp;
+
+---
+
+## Spring Security
+
+* Keretrendszer
+  * Java nyelven írt, nyílt forrású
+  * Hitelesítés (authentication): annak ellenőrzése, hogy a felhasználó valóban az, akinek mondja magát (pl. jelszóval, kétfaktoros hitelesítéssel)
+  * Engedélyezés (authorization): annak eldöntése, hogy egy hitelesített felhasználó milyen erőforrásokhoz férhet hozzá
+  * Védelmi mechanizmusok a gyakori támadási módok ellen  
+  * Spring alkalmazásokhoz könnyen illeszthető, akár Servlet alapú, akár Reactive alkalmazásokhoz
+  * Integráció más eszközökhöz, pl. Spring Data, JSP/Thymeleaf/stb. template
+  * Könnyen tesztelhető
+
+---
+
+## Gyakori használati esetek hitelesítés esetén
+
+* Webes alkalmazás felhasználónév és jelszó alapú autentikációval, sessionnel
+* REST API-val rendelkező alkalmazás, JWT token kiadásával és ellenőrzésével, állapotmentes módon
+* OAuth 2.0 és OpenID Connect
+
+---
+
+## Főbb jellemzők
+
+* Űrlap alapú bejelentkezés, Remember me funkcionalitás
+* Basic authentication
+* Jelszó hash-elés
+* Tanúsítvány alapú hitelesítés
+* Felhasználók tárolása adatbázisban
+* Felhasználók tárolása LDAP szerveren
+
+---
+
+## Engedélyezés
+
+* URL alapú védelem
+* Metódus szintű védelem (annotációk használatával)
+* Access Controll List (ACL)
+
+---
+
+## Védelmi mechanizmusok
+
+* Security Headers, pl. HTTP Strict Transport Security (HSTS), Content Security Policy (CSP), stb.
+* Cross Site Request Forgery (CSRF)
+* Illegális kérések kiszűrése
+
+---
+
+class: inverse, center, middle
+
+# Architektúra Servlet környezetben
+
+## &nbsp;
+
+---
+
+## Architektúra Servlet környezetben
+
+<img src="images/spring-security-architecture.drawio.svg" width="200" />
+
+---
+
+## Naplózás
+
+```yaml
+logging:
+  level:
+    org.springframework.security: trace
+```
+
+---
+
+## Spring Boot Autoconfiguration
+
+* Secure by Default: alapértelmezett beállítások biztonságossá teszik az alkalmazást
+* Principle of Least Privilege: felhasználóknak a legkevesebb hozzáférést adjuk, hogy a munkáját el tudja végezni
+* `HttpSecurityConfiguration` létrehoz a `httpSecurity()` metódusban egy `HttpSecurity` példányt 
+* `UserDetailsServiceAutoConfiguration`
+* `SecurityAutoConfiguration`
+  * Import `SpringBootWebSecurityConfiguration`
+    * `HttpSecurity` injektálása, `build()` metódussal egy `DefaultSecurityFilterChain` létrehozása
+    * Minden URL védett
+    * Form login és Basic authentication (Content negotiation alapján)
+    * `@EnableWebSecurity` annotáció, így nem kell kitenni
+  * `DefaultAuthenticationEventPublisher` események publikálására
+
+---
+
+class: inverse, center, middle
+
+# Authentication és Principal
+
+## &nbsp;
+
+---
+
+## Principal
+
+* Fogalom, nincs hozzá interfész vagy osztály
+* Felhasználót reprezentál
+* Tipikusan `UserDetails` példány
+
+---
+
+## Authentication
+
+* `org.springframework.security.core.Authentication`
+* Bejelentkezés tényét reprezentálja
+* Metódusai:
+  * `getName()`
+  * `getCredentials()`
+  * `getAuthorities()`, `GrantedAuthority` példányok (`SimpleGrantedAuthority`)
+  * `getDetails()`, pl. IP cím
+  * `getPrincipal()`, `Object` típusú
+  * `isAuthenticated()`
+* `extends javax.security.Principal`, `getName()` metódussal
+* `UsernamePasswordAuthenticationToken` implementálja
+
+---
+
+## SecurityContext
+
+* `SecurityContextHolder`-től kérhető le
+* `getAuthentication()` metódusa van
+
+---
+
+class: inverse, center, middle
+
+# Bejelentkezés felhasználónévvel és jelszóval
+
+---
+
+## Bejelentkezés felhasználónévvel és jelszóval
+
+<img src="images/username-password.drawio.svg" width="350" />
+
+---
+
+class: inverse, center, middle
+
 # JWT
 
 ## &nbsp;
@@ -8,10 +155,11 @@ class: inverse, center, middle
 
 ## JWT
 
-* Saját claimeket is definiál: `iss` (Issuer), `sub` (Subject), `iat` (Issued at), `exp` (Expiration)
-* JSON dokumentumok, így struktúrált adat tárolható benne
-* BASE64-gyel kódolva, hiszen így adható át könnyen webes környezetben
 * Három részből áll: Header, Payload, Signature
+* JSON dokumentumok, így struktúrált adat tárolható benne
+* Mezőit claimeknek nevezi
+* Saját claimeket is definiál: `iss` (Issuer), `sub` (Subject), `iat` (Issued at), `exp` (Expiration)
+* BASE64-gyel kódolva, hiszen így adható át könnyen webes környezetben
 
 JSON Web Token (JWT) ([RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519))
 
@@ -195,25 +343,38 @@ class: inverse, center, middle
 
 ## Authorization Code Grant Types lépések
 
-<img src="images/oauth-auth-code-grant-type_1.drawio.svg" width="600"/>
+<img src="images/oauth-auth-code-grant-type.drawio.svg" width="600"/>
 
 ---
 
 ## További paraméterek
 
-<img src="images/oauth-auth-code-grant-type_2.drawio.svg" width="600"/>
+<img src="images/oauth-auth-code-grant-type_params.drawio.svg" width="600"/>
 
 ---
 
 ## Paraméterek leírása
 
-* Authorization Endpoint
+* Authorization Endpoint kérésben
   * `response_type=code`: Authorization Code Grant Type
   * `client_id`
   * `scope`: `openid`
   * `state`: CSRF támadás ellen, átirányítás előtt elmenti a Client (pl. session), majd visszairányításnál visszakapja és ellenőrzi (OAuth 2.0 protokoll része)
   * `redirect_uri`: milyen címre irányítson vissza
   * `nonce` (OpenID Connect része) - Client generálja, auth server beleteszi a tokenbe, amit a client ellenőrizni tud 
+* Authorization Endpoint válaszban:
+  * `state`: ugyanaz, ami a kérésben elküldésre került
+  * `session_state`:  [OpenID Connect Session Management](https://openid.net/specs/openid-connect-session-1_0.html)
+  * `iss`: Issuer, OAuth 2.0 Authorization Server Issuer Identification ([RFC 9207](https://www.rfc-editor.org/rfc/rfc9207.html))
+  * `code`: Authorization Code
+
+---
+
+## Token claimek
+
+* `iss`: Issuer
+* `azp`: Authorized party, megegyezik a `client_id` értékével
+* `nonce`: Megegyezik a küldött `nonce` értékével
 
 ---
 
@@ -227,7 +388,7 @@ class: inverse, center, middle
 
 ## PKCE lépések
 
-<img src="images/oauth-auth-code-grant-type_3.drawio.svg" width="600"/>
+<img src="images/oauth-auth-code-grant-type_pkce.drawio.svg" width="600"/>
 
 ---
 
@@ -240,3 +401,16 @@ class: inverse, center, middle
   * `code_challenge_method`: `S256`
 * Mikor a code használatával tokent kér le, ezt is el kell küldenie `code_verifier` (form) paraméterként
 
+---
+
+class: inverse, center, middle
+
+# Cluster-es környezet architektúrája
+
+## &nbsp;
+
+---
+
+## Cluster-es környezet architektúrája
+
+<img src="images/oauth2-keycloak-cluster.drawio.svg" width="600"/>

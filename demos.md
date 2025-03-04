@@ -2049,6 +2049,88 @@ public Converter<Jwt,? extends AbstractAuthenticationToken> jwtAuthenticationCon
 }
 ```
 
+## Postman használata
+
+* _Authorization_ / _OAuth 2.0_
+* _Grant Type_: Password Credentials
+* _Access Token URL_: `http://localhost:8080/realms/employees/protocol/openid-connect/token`
+* _Client ID_: `employees-frontend`
+* _Scope_: `openid`
+
+# Scope-ok használata
+
+Keycloak
+
+_Client scopes_: `employees:write`, _Include in token scope_
+
+Scope fülön: _employees_user_
+
+_Clients_ / _employees-frontend_ / Client scopes / Add client scope (Optional) - csak akkor jelenik meg, ha explicit kérjük
+
+Lekérés HTTP Requests-ből
+
+`SecurityConfig`
+
+```java
+.hasAuthority("SCOPE_employees:write")
+```
+
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            scope: openid,email,profile,employees:write
+```
+
+# PKCE
+
+Frontend - `SecurityConfig`
+
+```java
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http, ClientRegistrationRepository repo) throws Exception {
+        String baseUri = OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI;
+        DefaultOAuth2AuthorizationRequestResolver resolver = new DefaultOAuth2AuthorizationRequestResolver(repo, baseUri);
+        resolver.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
+      // ...
+
+      .oauth2Login(conf -> conf.authorizationEndpoint(endpointConf -> endpointConf.authorizationRequestResolver(resolver)))
+
+      // ...
+    }
+```
+
+Böngésző DevTools, url paraméter
+
+# Logout a Keycloak szerveren is
+
+Frontend - `SecurityConfig`
+
+```java
+public SecurityFilterChain filterChain(HttpSecurity http, ClientRegistrationRepository repo, LogoutSuccessHandler logoutSuccessHandler) throws Exception {
+
+  // ...
+
+.logout(conf -> conf.logoutUrl("/logout").logoutSuccessHandler(logoutSuccessHandler));
+
+  // ...
+
+}
+```
+
+```java
+@Bean
+public LogoutSuccessHandler oidcLogoutSuccessHandler(ClientRegistrationRepository repo) {
+    OidcClientInitiatedLogoutSuccessHandler oidcLogoutSuccessHandler =
+            new OidcClientInitiatedLogoutSuccessHandler(repo);
+    oidcLogoutSuccessHandler.setPostLogoutRedirectUri("{baseUrl}");
+    return oidcLogoutSuccessHandler;
+}
+```
+
 # Alkalmazás clusterezése Keycloak esetén
 
 ## Eureka Service Discovery
