@@ -38,7 +38,8 @@ public class EmployeesController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ResponseEntity<EmployeeResource> createEmployee(@Valid @RequestBody EmployeeResource command, UriComponentsBuilder builder) {
+    public ResponseEntity<EmployeeResource> createEmployee(@Valid @RequestBody EmployeeResource command, UriComponentsBuilder builder, @RequestHeader HttpHeaders headers) {
+        log.debug("Headers: {}", headers);
         var resource = employeesService.createEmployee(command);
         return ResponseEntity.created(builder.path("/api/employees/{id}").buildAndExpand(resource.getId()).toUri()).body(resource);
     }

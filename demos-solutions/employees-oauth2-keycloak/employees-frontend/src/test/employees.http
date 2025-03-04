@@ -2,4 +2,4 @@
 POST http://localhost:8090/realms/EmployeesRealm/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=password&client_id=employees-frontend&username=johndoe&password=johndoe
+grant_type=password&client_id=employees-frontend&username=johndoe&password=johndoe&scope=openid%20employees%3Awrite

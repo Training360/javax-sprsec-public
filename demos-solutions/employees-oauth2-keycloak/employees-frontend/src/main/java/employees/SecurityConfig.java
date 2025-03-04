@@ -10,12 +10,13 @@ import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMap
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
+import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
+import org.springframework.security.oauth2.client.web.*;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.oauth2.core.user.OAuth2UserAuthority;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 
 import java.util.List;
 import java.util.Map;
@@ -26,18 +27,31 @@ import java.util.stream.Stream;
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, ClientRegistrationRepository repo, LogoutSuccessHandler logoutSuccessHandler) throws Exception {
+        String baseUri = OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI;
+        DefaultOAuth2AuthorizationRequestResolver resolver = new DefaultOAuth2AuthorizationRequestResolver(repo, baseUri);
+        resolver.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
+
         http
                 .authorizeHttpRequests(registry -> registry
                         .requestMatchers("/create-employee")
 //                        .authenticated()
-                                .hasRole("employees_user")
+//                                .hasRole("employees_user")
+                                .hasAuthority("SCOPE_employees:write")
                         .anyRequest()
                         .permitAll()
                 )
-                .oauth2Login(Customizer.withDefaults())
-                .logout(conf -> conf.logoutUrl("/"));
+                .oauth2Login(conf -> conf.authorizationEndpoint(endpointConf -> endpointConf.authorizationRequestResolver(resolver)))
+                .logout(conf -> conf.logoutUrl("/logout").logoutSuccessHandler(logoutSuccessHandler));
         return http.build();
+    }
+
+    @Bean
+    public LogoutSuccessHandler oidcLogoutSuccessHandler(ClientRegistrationRepository repo) {
+        OidcClientInitiatedLogoutSuccessHandler oidcLogoutSuccessHandler =
+                new OidcClientInitiatedLogoutSuccessHandler(repo);
+        oidcLogoutSuccessHandler.setPostLogoutRedirectUri("{baseUrl}");
+        return oidcLogoutSuccessHandler;
     }
 
     @Bean
